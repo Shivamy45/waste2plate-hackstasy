@@ -141,14 +141,16 @@ export default function FoodAlertForm() {
 	return (
 		<>
 			<Script
-				src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&callback=Function.prototype`}
-				strategy="afterInteractive"
-				defer
-				onError={(e) => {
-					console.error("Failed to load Google Maps script:", e);
-					setApiError("Failed to load Google Maps");
-				}}
-			/>
+  src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`}
+  strategy="afterInteractive"
+  onError={(e) => {
+    console.error("Failed to load Google Maps script:", e);
+    setApiError("Failed to load Google Maps");
+  }}
+/>
+
+
+
 			<div className="text-black p-6 rounded-xl shadow-lg max-w-2xl mx-auto border-2 border-black">
 				<ToastContainer
 					position="top-right"
