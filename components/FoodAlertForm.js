@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { db } from "@/firebase/config";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import Script from "next/script";
 
 const foodAlertSchema = z.object({
 	giveawayName: z.string().min(1, "Required"),
@@ -24,31 +25,14 @@ const foodAlertSchema = z.object({
 	slots: z.coerce.number().min(1, "Must be at least 1"),
 });
 
-const INDIAN_CITIES = [
-	"Ahmedabad",
-	"Ayodhya",
-	"Bangalore",
-	"Chennai",
-	"Delhi",
-	"Gorakhpur",
-	"Hyderabad",
-	"Kolkata",
-	"Lucknow",
-	"Mumbai",
-	"Patna",
-	"Pune",
-	"Surat",
-	"Jaipur",
-	"Indore",
-	"Nagpur",
-	"Kanpur",
-];
 
 export default function FoodAlertForm() {
 	const [query, setQuery] = useState("");
 	const [showSuggestions, setShowSuggestions] = useState(false);
-	const [filteredCities, setFilteredCities] = useState([]);
+	const [predictions, setPredictions] = useState([]);
 	const [location, setLocation] = useState(null);
+	const [apiError, setApiError] = useState(null);
+	const autocompleteService = useRef(null);
 	const inputRef = useRef(null);
 
 	const {
@@ -62,20 +46,64 @@ export default function FoodAlertForm() {
 	});
 
 	// Get user location on component mount
-	
-
-	// Filter city suggestions
 	useEffect(() => {
-		setFilteredCities(
-			INDIAN_CITIES.filter((city) =>
-				city.toLowerCase().startsWith(query.toLowerCase())
-			).sort()
-		);
-	}, [query]);
+		if ("geolocation" in navigator) {
+			navigator.geolocation.getCurrentPosition(
+				(position) => {
+					setLocation({
+						latitude: position.coords.latitude,
+						longitude: position.coords.longitude,
+					});
+				},
+				(error) => {
+					console.error("Error getting location:", error.message);
+					//alert("Please allow location access for accurate results.");
+					toast("Please allow location access for accurate results.");
+				},
+				{ enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+			);
+		} else {
+			console.error("Geolocation is not supported by this browser.");
+			//alert("Geolocation is not supported by your browser.");
+			toast("Geolocation is not supported by your browser.");
+		}
+	}, []);
 
-	const handleCitySelect = (cityName) => {
-		setQuery(cityName);
-		setValue("city", cityName);
+	// Handle city search with Google Places API
+	useEffect(() => {
+		if (apiError) {
+			toast.error(apiError);
+			return;
+		}
+
+		if (query.length > 2 && autocompleteService.current) {
+			try {
+				autocompleteService.current.getPlacePredictions(
+					{
+						input: query,
+						componentRestrictions: { country: "in" },
+						types: ["(cities)"],
+					},
+					(predictions) => {
+						if (predictions) {
+							setPredictions(predictions);
+							setShowSuggestions(true);
+						}
+					}
+				);
+			} catch (error) {
+				console.error("Google Places API error:", error);
+				setApiError("Error fetching location suggestions");
+			}
+		} else {
+			setPredictions([]);
+			setShowSuggestions(false);
+		}
+	}, [query, apiError]);
+
+	const handleCitySelect = (place) => {
+		setQuery(place.description);
+		setValue("city", place.description);
 		setShowSuggestions(false);
 	};
 
@@ -102,7 +130,7 @@ export default function FoodAlertForm() {
 			toast("Giveaway submitted successfully!");
 			reset();
 			setQuery("");
-			setFilteredCities([]);
+			setPredictions([]);
 		} catch (error) {
 			console.error("Error adding document: ", error);
 			//alert("Error submitting the giveaway.");
@@ -111,74 +139,85 @@ export default function FoodAlertForm() {
 	};
 
 	return (
-		<div className="text-black p-6 rounded-xl shadow-lg max-w-2xl mx-auto border-2 border-black">
-			<ToastContainer
-				position="top-right"
-				autoClose={1000}
-				hideProgressBar={false}
-				newestOnTop={true}
-				closeOnClick={false}
-				rtl={false}
-				theme="dark"
-				transition={Slide}
+		<>
+			<Script
+				src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places&callback=Function.prototype`}
+				strategy="afterInteractive"
+				defer
+				onError={(e) => {
+					console.error("Failed to load Google Maps script:", e);
+					setApiError("Failed to load Google Maps");
+				}}
 			/>
-			<h2 className="text-center text-2xl mb-4 font-bold">
-				Food Giveaway Page
-			</h2>
-			<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-				<div className="grid grid-cols-2 gap-4">
-					<div>
-						<Label className="text-lg">Name</Label>
-						<Input
-							className="border-black text-black"
-							{...register("giveawayName")}
-						/>
-						<p className="text-red-500 text-sm">
-							{errors.giveawayName?.message}
-						</p>
+			<div className="text-black p-6 rounded-xl shadow-lg max-w-2xl mx-auto border-2 border-black">
+				<ToastContainer
+					position="top-right"
+					autoClose={1000}
+					hideProgressBar={false}
+					newestOnTop={true}
+					closeOnClick={false}
+					rtl={false}
+					theme="dark"
+					transition={Slide}
+				/>
+				<h2 className="text-center text-2xl mb-4 font-bold">
+					Food Giveaway Page
+				</h2>
+				<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+					<div className="grid grid-cols-2 gap-4">
+						<div>
+							<Label className="text-lg">Name</Label>
+							<Input
+								className="border-black text-black"
+								{...register("giveawayName")}
+							/>
+							<p className="text-red-500 text-sm">
+								{errors.giveawayName?.message}
+							</p>
+						</div>
+						<div>
+							<Label className="text-lg">Organizer</Label>
+							<Input
+								className="border-black text-black"
+								{...register("orgName")}
+							/>
+							<p className="text-red-500 text-sm">
+								{errors.orgName?.message}
+							</p>
+						</div>
 					</div>
-					<div>
-						<Label className="text-lg">Organizer</Label>
-						<Input
-							className="border-black text-black"
-							{...register("orgName")}
-						/>
-						<p className="text-red-500 text-sm">
-							{errors.orgName?.message}
-						</p>
-					</div>
-				</div>
 
-				<div className="grid grid-cols-2 gap-4">
-					<div className="relative" ref={inputRef}>
-						<Label className="text-lg">City</Label>
-						<Input
-							type="text"
-							value={query}
-							onFocus={() => setShowSuggestions(true)}
-							onChange={(e) => {
-								setQuery(e.target.value);
-								setShowSuggestions(true);
-							}}
-							className="border border-black p-2 rounded w-full text-black"
-						/>
-						{showSuggestions && filteredCities.length > 0 && (
-							<ul className="absolute bg-white border w-full z-10 rounded shadow max-h-40 overflow-y-auto">
-								{filteredCities.map((city) => (
-									<li
-										key={city}
-										className="px-4 py-2 hover:bg-gray-200 cursor-pointer"
-										onClick={() => handleCitySelect(city)}>
-										{city}
-									</li>
-								))}
-							</ul>
+					<div className="space-y-2">
+						<Label htmlFor="city">City</Label>
+						<div className="relative">
+							<Input
+								id="city"
+								{...register("city")}
+								value={query}
+								onChange={(e) => setQuery(e.target.value)}
+								onFocus={() => setShowSuggestions(true)}
+								ref={inputRef}
+								placeholder="Enter your city"
+							/>
+							{showSuggestions && predictions.length > 0 && (
+								<ul className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+									{predictions.map((prediction) => (
+										<li
+											key={prediction.place_id}
+											className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+											onClick={() => handleCitySelect(prediction)}
+										>
+											{prediction.description}
+										</li>
+									))}
+								</ul>
+							)}
+						</div>
+						{errors.city && (
+							<p className="text-sm text-red-500">{errors.city.message}</p>
 						)}
-						<p className="text-red-500 text-sm">
-							{errors.city?.message}
-						</p>
-						<input type="hidden" {...register("city")} />
 					</div>
+
 					<div>
 						<Label className="text-lg">Address</Label>
 						<Input
@@ -189,66 +228,66 @@ export default function FoodAlertForm() {
 							{errors.address?.message}
 						</p>
 					</div>
-				</div>
 
-				<div>
-					<Label className="text-lg">Description</Label>
-					<Textarea
-						className="border-black text-black"
-						{...register("description")}
-					/>
-				</div>
-
-				<div>
-					<Label className="text-lg">Food Type</Label>
-					<RadioGroup
-						className="flex space-x-4"
-						onValueChange={(val) => setValue("foodType", val)}>
-						<RadioGroupItem value="veg" id="veg" />
-						<Label htmlFor="veg">Veg</Label>
-						<RadioGroupItem value="nonVeg" id="nonVeg" />
-						<Label htmlFor="nonVeg">Non-Veg</Label>
-					</RadioGroup>
-					<p className="text-red-500 text-sm">
-						{errors.foodType?.message}
-					</p>
-				</div>
-
-				<div className="grid grid-cols-2 gap-4">
 					<div>
-						<Label className="text-lg">Start Time</Label>
-						<Input
-							type="time"
+						<Label className="text-lg">Description</Label>
+						<Textarea
 							className="border-black text-black"
-							{...register("startTime")}
+							{...register("description")}
 						/>
 					</div>
+
 					<div>
-						<Label className="text-lg">End Time</Label>
+						<Label className="text-lg">Food Type</Label>
+						<RadioGroup
+							className="flex space-x-4"
+							onValueChange={(val) => setValue("foodType", val)}>
+							<RadioGroupItem value="veg" id="veg" />
+							<Label htmlFor="veg">Veg</Label>
+							<RadioGroupItem value="nonVeg" id="nonVeg" />
+							<Label htmlFor="nonVeg">Non-Veg</Label>
+						</RadioGroup>
+						<p className="text-red-500 text-sm">
+							{errors.foodType?.message}
+						</p>
+					</div>
+
+					<div className="grid grid-cols-2 gap-4">
+						<div>
+							<Label className="text-lg">Start Time</Label>
+							<Input
+								type="time"
+								className="border-black text-black"
+								{...register("startTime")}
+							/>
+						</div>
+						<div>
+							<Label className="text-lg">End Time</Label>
+							<Input
+								type="time"
+								className="border-black text-black"
+								{...register("endTime")}
+							/>
+						</div>
+					</div>
+
+					<div>
+						<Label className="text-lg">No. of Slots Available</Label>
 						<Input
-							type="time"
+							type="number"
 							className="border-black text-black"
-							{...register("endTime")}
+							{...register("slots")}
+							min={1}
 						/>
 					</div>
-				</div>
 
-				<div>
-					<Label className="text-lg">No. of Slots Available</Label>
-					<Input
-						type="number"
-						className="border-black text-black"
-						{...register("slots")}
-						min={1}
-					/>
-				</div>
-
-				<Button
-					type="submit"
-					className="w-full bg-white cursor-pointer text-black border-2 border-black hover:bg-gray-300">
-					{!isSubmitting ? "Start GiveAway" : "Starting..."}
-				</Button>
-			</form>
-		</div>
+					<Button
+						type="submit"
+						className="w-full bg-white cursor-pointer text-black border-2 border-black hover:bg-gray-300">
+						{!isSubmitting ? "Start GiveAway" : "Starting..."}
+					</Button>
+				</form>
+			</div>
+		</>
 	);
 }
