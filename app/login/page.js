@@ -1,6 +1,6 @@
 "use client";
 import { ToastContainer, toast, Slide } from "react-toastify";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "../../firebase/config";
 import {
@@ -15,6 +15,61 @@ export default function LoginPage() {
 	const [password, setPassword] = useState("");
 	const [role, setRole] = useState("giver");
 	const router = useRouter();
+	const [coordinates, setCoordinates] = useState(null);
+	const [isLoading, setIsLoading] = useState(false);
+	const [error, setError] = useState(null);
+
+	const sendCoordinatesToBackend = (lat, lng) => {
+		// Implement your backend communication logic here
+		console.log(`Sending coordinates to backend: ${lat}, ${lng}`);
+	};
+
+	const getLocation = () => {
+		if (!navigator.geolocation) {
+			setError("Geolocation is not supported by your browser");
+			return;
+		}
+
+		setIsLoading(true);
+		setError(null);
+
+		navigator.geolocation.getCurrentPosition(
+			(position) => {
+				const lat = position.coords.latitude;
+				const lng = position.coords.longitude;
+
+				// Set coordinates in state
+				setCoordinates({ lat, lng });
+
+				// Call the function that will be used to communicate with backend
+				sendCoordinatesToBackend(lat, lng);
+
+				setIsLoading(false);
+			},
+			(error) => {
+				setIsLoading(false);
+				switch (error.code) {
+					case error.PERMISSION_DENIED:
+						setError("Location permission denied");
+						break;
+					case error.POSITION_UNAVAILABLE:
+						setError("Location information unavailable");
+						break;
+					case error.TIMEOUT:
+						setError("Location request timed out");
+						break;
+					default:
+						setError("An unknown error occurred");
+				}
+			},
+			{ enableHighAccuracy: true }
+		);
+	};
+
+	// Use useEffect to call getLocation when the component mounts
+	useEffect(() => {
+		getLocation();
+	}, []);
 
 	const handleSubmit = async () => {
 		try {
@@ -30,6 +85,7 @@ export default function LoginPage() {
 				await setDoc(doc(db, "users", userCredential.user.uid), {
 					email,
 					role,
+					coordinates,
 				});
 			} else {
 				// Login flow
@@ -56,7 +112,6 @@ export default function LoginPage() {
 			toast(err.message);
 		}
 	};
-	
 
 	return (
 		<div className="flex justify-center items-center min-h-screen bg-gray-100">

@@ -44,62 +44,62 @@ export default function FoodAlertForm() {
 	} = useForm({
 		resolver: zodResolver(foodAlertSchema),
 	});
+	const [coordinates, setCoordinates] = useState(null);
+	const [isLoading, setIsLoading] = useState(false);
+	const [error, setError] = useState(null);
 
-	// Get user location on component mount
-	useEffect(() => {
-		if ("geolocation" in navigator) {
-			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					setLocation({
-						latitude: position.coords.latitude,
-						longitude: position.coords.longitude,
-					});
-				},
-				(error) => {
-					console.error("Error getting location:", error.message);
-					//alert("Please allow location access for accurate results.");
-					toast("Please allow location access for accurate results.");
-				},
-				{ enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-			);
-		} else {
-			console.error("Geolocation is not supported by this browser.");
-			//alert("Geolocation is not supported by your browser.");
-			toast("Geolocation is not supported by your browser.");
-		}
-	}, []);
+	const sendCoordinatesToBackend = (lat, lng) => {
+		// Implement your backend communication logic here
+		console.log(`Sending coordinates to backend: ${lat}, ${lng}`);
+	};
 
-	// Handle city search with Google Places API
-	useEffect(() => {
-		if (apiError) {
-			toast.error(apiError);
+	const getLocation = () => {
+		if (!navigator.geolocation) {
+			setError("Geolocation is not supported by your browser");
 			return;
 		}
 
-		if (query.length > 2 && autocompleteService.current) {
-			try {
-				autocompleteService.current.getPlacePredictions(
-					{
-						input: query,
-						componentRestrictions: { country: "in" },
-						types: ["(cities)"],
-					},
-					(predictions) => {
-						if (predictions) {
-							setPredictions(predictions);
-							setShowSuggestions(true);
-						}
-					}
-				);
-			} catch (error) {
-				console.error("Google Places API error:", error);
-				setApiError("Error fetching location suggestions");
-			}
-		} else {
-			setPredictions([]);
-			setShowSuggestions(false);
-		}
-	}, [query, apiError]);
+		setIsLoading(true);
+		setError(null);
+
+		navigator.geolocation.getCurrentPosition(
+			(position) => {
+				const lat = position.coords.latitude;
+				const lng = position.coords.longitude;
+
+				// Set coordinates in state
+				setCoordinates({ lat, lng });
+
+				// Call the function that will be used to communicate with backend
+				sendCoordinatesToBackend(lat, lng);
+
+				setIsLoading(false);
+			},
+			(error) => {
+				setIsLoading(false);
+				switch (error.code) {
+					case error.PERMISSION_DENIED:
+						setError("Location permission denied");
+						break;
+					case error.POSITION_UNAVAILABLE:
+						setError("Location information unavailable");
+						break;
+					case error.TIMEOUT:
+						setError("Location request timed out");
+						break;
+					default:
+						setError("An unknown error occurred");
+				}
+			},
+			{ enableHighAccuracy: true }
+		);
+	};
+
+	// Use useEffect to call getLocation when the component mounts
+	useEffect(() => {
+		getLocation();
+	}, []);
+
 
 	const handleCitySelect = (place) => {
 		setQuery(place.description);
@@ -187,37 +187,6 @@ export default function FoodAlertForm() {
 						</div>
 					</div>
 
-					<div className="space-y-2">
-						<Label htmlFor="city">City</Label>
-						<div className="relative">
-							<Input
-								id="city"
-								{...register("city")}
-								value={query}
-								onChange={(e) => setQuery(e.target.value)}
-								onFocus={() => setShowSuggestions(true)}
-								ref={inputRef}
-								placeholder="Enter your city"
-							/>
-							{showSuggestions && predictions.length > 0 && (
-								<ul className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-									{predictions.map((prediction) => (
-										<li
-											key={prediction.place_id}
-											className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-											onClick={() => handleCitySelect(prediction)}
-										>
-											{prediction.description}
-										</li>
-									))}
-								</ul>
-							)}
-						</div>
-						{errors.city && (
-							<p className="text-sm text-red-500">{errors.city.message}</p>
-						)}
-					</div>
-
 					<div>
 						<Label className="text-lg">Address</Label>
 						<Input
@@ -227,14 +196,6 @@ export default function FoodAlertForm() {
 						<p className="text-red-500 text-sm">
 							{errors.address?.message}
 						</p>
-					</div>
-
-					<div>
-						<Label className="text-lg">Description</Label>
-						<Textarea
-							className="border-black text-black"
-							{...register("description")}
-						/>
 					</div>
 
 					<div>
