@@ -1,9 +1,64 @@
 "use client";
-import React from "react";
+import React ,{useState,useEffect}from "react";
 import Link from "next/link";
 import Extension from "@/components/extension";
 
 const page = () => {
+	const [coordinates, setCoordinates] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+  const sendCoordinatesToBackend = (lat, lng) => {
+    // Implement your backend communication logic here
+    console.log(`Sending coordinates to backend: ${lat}, ${lng}`);
+  };
+
+  const getLocation = () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        // Set coordinates in state
+        setCoordinates({ lat, lng });
+        
+        // Call the function that will be used to communicate with backend
+        sendCoordinatesToBackend(lat, lng);
+        
+        setIsLoading(false);
+      },
+      (error) => {
+        setIsLoading(false);
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            setError("Location permission denied");
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setError("Location information unavailable");
+            break;
+          case error.TIMEOUT:
+            setError("Location request timed out");
+            break;
+          default:
+            setError("An unknown error occurred");
+        }
+      },
+      { enableHighAccuracy: true }
+    );
+  };
+
+  // Use useEffect to call getLocation when the component mounts
+  useEffect(() => {
+    getLocation();
+  }, []);
 	return (
 		<div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-100">
 			<main className="container mx-auto px-4 py-12">

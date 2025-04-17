@@ -62,28 +62,7 @@ export default function FoodAlertForm() {
 	});
 
 	// Get user location on component mount
-	useEffect(() => {
-		if ("geolocation" in navigator) {
-			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					setLocation({
-						latitude: position.coords.latitude,
-						longitude: position.coords.longitude,
-					});
-				},
-				(error) => {
-					console.error("Error getting location:", error.message);
-					//alert("Please allow location access for accurate results.");
-					toast("Please allow location access for accurate results.");
-				},
-				{ enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-			);
-		} else {
-			console.error("Geolocation is not supported by this browser.");
-			//alert("Geolocation is not supported by your browser.");
-			toast("Geolocation is not supported by your browser.");
-		}
-	}, []);
+	
 
 	// Filter city suggestions
 	useEffect(() => {
